@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  # [service name below] line below gets replaced by container.py with your container config name
+  skaimot_service:
+    #### name image and container ####
+    image: ghcr.io/skaivision/snippetmanager:dev
+    container_name: snippet_manager
+
+    #### starting command that keeps container alive ####
+    command: tail -F /dev/null
+    # command: ${START_CMD}
+
+    #### build Dockerfile and pass build args ####
+    build:
+      dockerfile: Dockerfile
+
+    #### volumes and mappings ####
+    volumes:
+      - ${MAP_DISPLAY}
+      - ${MAP_SSH}
+      - ${MAP_TIMEZONE}
+      - ./ContainerCode:/root/snippetmanager
+      - ./logs:/skailogs/
+      - ${DEALERSHIP_CONFIG_FOLDER}:/dealership_config/
+
+    environment:
+      DISPLAY: ${DISPLAY_CHOICE}
+      
+    # enabled for showing display locally
+    # ipc: host
+
+    network_mode: "host" # uses host network stack
+    restart: always
+    working_dir: /root/snippetmanager
