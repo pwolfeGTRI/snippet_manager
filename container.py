@@ -14,9 +14,9 @@ with open('ContainerConfig.yaml', 'r') as f:
     cfg = yaml.safe_load(f)
 
 # load launch config to get dealership 
-with open('~/dealership_handler/launch_cfg_select.yaml', 'r') as f:
-    launch_cfg = yaml.safe_load(f)
-dealership_config_folder = launch_cfg['DEALERSHIP_CONFIG']
+# with open('/home/skai-adat/dealership_handler/launch_cfg_select.yaml', 'r') as f:
+#     launch_cfg = yaml.safe_load(f)
+dealership_config_folder = '/home/skai-adat/dealership_handler/calibration_results/global_bmw'
 
 # load  dealership config
 

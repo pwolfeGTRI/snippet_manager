@@ -2,10 +2,10 @@ version: "3.9"
 
 services:
   # [service name below] line below gets replaced by container.py with your container config name
-  skaimot_service:
+  snippetmanager_service:
     #### name image and container ####
     image: ghcr.io/skaivision/snippetmanager:dev
-    container_name: snippet_manager
+    container_name: ${BASENAME}_instance_${PARENTDIR}
 
     #### starting command that keeps container alive ####
     command: tail -F /dev/null
@@ -13,7 +13,10 @@ services:
 
     #### build Dockerfile and pass build args ####
     build:
+      context: .
       dockerfile: Dockerfile
+      args:
+        FROM_IMG: ${FROM_IMG_NOGPU}
 
     #### volumes and mappings ####
     volumes:
@@ -23,6 +26,7 @@ services:
       - ./ContainerCode:/root/snippetmanager
       - ./logs:/skailogs/
       - ${DEALERSHIP_CONFIG_FOLDER}:/dealership_config/
+      - /var/skai/videos:/skaivideos/
 
     environment:
       DISPLAY: ${DISPLAY_CHOICE}

@@ -1,0 +1,3 @@
+[submodule "msg_interface"]
+	path = msg_interface
+	url = https://github.com/pwolfeGTRI/msg_interface.git
