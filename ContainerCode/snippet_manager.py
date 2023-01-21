@@ -8,6 +8,7 @@ import logging
 class SnippetManager:
 
     dateformat='%Y-%m-%dT%H-%M-%SZ'
+    mp4_dateformat = f'{dateformat}.mp4'
     logger = logging.getLogger(__name__)
 
     @staticmethod
@@ -54,7 +55,7 @@ class SnippetManager:
         cls.logger.debug(f'loading mp4 start times from folder {cam_folder}...')
         mp4_start_times = []
         for f in mp4_files:
-            dt_object = datetime.datetime.strptime(f, f'{cls.dateformat}.mp4')
+            dt_object = datetime.datetime.strptime(f, cls.mp4_dateformat)
             mp4_start_times.append(dt_object)
         mp4_start_times = sorted(mp4_start_times)
         cls.logger.debug('got these sorted mp4 start times: ')
@@ -111,17 +112,62 @@ class SnippetManager:
             video_snippet (mpe.VideoFileClip): final assembled moviepy.editor.VideoFileClip snippet
 
         """
+        t1_str = start_time.strftime(cls.dateformat)
+        t2_str = end_time.strftime(cls.dateformat)
+        duration = end_time - start_time
         
+        cls.logger.debug(f'now assembling from {t1_str} to {t2_str}')
+        cls.logger.debug(f'  duration: {duration}')
+        cls.logger.debug(f'  using files:')
+        [ cls.logger.debug(f'    {f}') for f in relevant_files]
+        
+        if len(relevant_files) == 1:
+            #### just do a subclip of first & only video
+            first_file = relevant_files[0]
+            file_start_time = datetime.datetime.strptime(first_file, cls.mp4_dateformat)
+            
+            video = mpe.VideoFileClip(f'{cam_folder}/{first_file}')
+            clip_start_t_sec = (start_time - file_start_time).total_seconds()
+            clip_end_t_sec = (end_time - file_start_time).total_seconds()
 
+            # return snippet
+            return video.subclip(clip_start_t_sec, clip_end_t_sec)
+        
+        else:
+            # get first and last video file names & start times
+            first_file, last_file = relevant_files[0], relevant_files[-1]
 
-        pass
+            # get video start time from file name
+            first_file_time = datetime.datetime.strptime(first_file, f'{cls.dateformat}.mp4')
+            last_file_time = datetime.datetime.strptime(last_file, f'{cls.dateformat}.mp4')
+            
+            # make first video to clip from start_time until end
+            first_video = mpe.VideoFileClip(f'{cam_folder}/{first_file}')
+            clip_start_t_sec = (start_time - first_file_time).total_seconds()
+            ten_min_sec = 10 * 60
+            first_clip = first_video.subclip(clip_start_t_sec, ten_min_sec)
+
+            # make last clip from beginning to end_time
+            last_video = mpe.VideoFileClip(f'{cam_folder}/{last_file}')
+            clip_end_t_sec = (end_time - last_file_time).total_seconds()
+            last_clip = last_video.subclip(0, clip_end_t_sec)
+
+            # concatenate together for final snippet using any files inbetween
+            # middle_videos will be empty list if len(releveant_files) == 2
+            middle_videos = [mpe.VideoFileClip(f'{cam_folder}/{f}').subclip(0, ten_min_sec) for f in relevant_files[1:-1]]
+            clip_list = [first_clip, *middle_videos, last_clip]
+            logger.debug('clip_list durations:')
+            [logger.debug(f'  {v.duration} sec') for v in clip_list]
+            return mpe.concatenate_videoclips(clip_list)
 
     @classmethod
     def generate_snippet_for_cam(cls, cam_folder, start_time, end_time) -> str:
         # take in datetime objects
         t1_str = start_time.strftime(cls.dateformat)
         t2_str = end_time.strftime(cls.dateformat)
-        cls.logger.info(f'\ncreating snippet for cam folder {cam_folder}\n  from {t1_str} to {t2_str}\n')
+        cls.logger.info(f'creating snippet for cam folder {cam_folder}')
+        cls.logger.info(f'  from {t1_str} to {t2_str}')
+        cls.logger.info(f'  duration {end_time - start_time}')
 
         # verify end time is greater than start time
         if end_time < start_time:
@@ -134,26 +180,48 @@ class SnippetManager:
         relevant_files = cls.get_relevant_video_files(mp4_start_times, start_time, end_time)
         cls.logger.info(f'relevant file list for {t1_str} to {t2_str}:')
         [cls.logger.info(f'  {f}') for f in relevant_files]
-        cls.logger.info()
 
         # now assemble video snippet
+        final_snippet = cls.assemble_video_snippet(cam_folder, relevant_files, start_time, end_time)
+        cls.logger.info(f'final snippet duration: {final_snippet.duration} sec')
 
-
+        # write final video snippet to file
+        output_file = 'final_snippet_out.mp4'
+        cls.logger.info(f'now writing final snippet out to: {output_file}')
+        final_snippet.write_videofile(output_file)
+        cls.logger.info('==== finished video snippet generation ====')
 
 if __name__=='__main__':
-    # main logger
-    logger = logging.getLogger(__name__)
     
-    #### config loggers ####
+    #### logger config ####
+    
+    # lowest_log_level = logging.INFO
+    lowest_log_level = logging.DEBUG
+
+    # setup logger for command line output and file output
+    logger = logging.getLogger(__name__)
+    logger.setLevel(lowest_log_level)
+    
     # setup same format and file handler for both main and SnippetManager loggers
     log_format=logging.Formatter('%(asctime)s [%(levelname)8s] %(message)s')
-    fh = logging.FileHandler('/skailogs/snpm.log')
-    fh.setLevel(logging.INFO)
-
-    logger.setLevel(logging.INFO)
-    SnippetManager.logger.setLevel(logging.DEBUG)
     
+    # file logging config
+    fh = logging.FileHandler('/skailogs/snpm.log', mode='w')
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(log_format)
+    
+    # stdout logging config
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+    ch.setFormatter(log_format)
 
+    # attach handlers
+    logger.addHandler(fh)
+    logger.addHandler(ch)
+    
+    # test msg
+    logger.debug('debug msg!')
+    logger.info('info msg!')
 
     # in future maybe actually use instance stuff for em listener. for now static methods
     snpm = SnippetManager()
@@ -175,7 +243,7 @@ if __name__=='__main__':
     test_join_with_timestamps = True
     if test_join_with_timestamps:
         start_time = datetime.datetime(2023, 1, 19, 17, 9, 30)
-        end_time = start_time + datetime.timedelta(minutes=20)
+        end_time = start_time + datetime.timedelta(seconds=610)
         snpm.generate_snippet_for_cam(
             cam_folder=testfolder,
             start_time=start_time,
