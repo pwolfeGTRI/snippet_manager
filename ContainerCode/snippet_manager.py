@@ -7,9 +7,11 @@ import logging
 
 class SnippetManager:
 
+    logger = logging.getLogger(__name__)
     dateformat='%Y-%m-%dT%H-%M-%SZ'
     mp4_dateformat = f'{dateformat}.mp4'
-    logger = logging.getLogger(__name__)
+    video_file_duration_sec = 10*60 # duration of the video files in the cam_folder
+    video_file_duration = datetime.timedelta(seconds=video_file_duration_sec)
 
     @staticmethod
     def join_mp4_file_list(file_list, output_file) -> None:
@@ -32,79 +34,123 @@ class SnippetManager:
         # extract_clip("input.mp4", 10, 20, "output.mp4")
 
     @classmethod
-    def get_mp4_start_times(cls, cam_folder) -> list:
-        """gets mp4 start times from camera folder assuming dateformat='%Y-%m-%dT%H-%M-%SZ.mp4'
+    def get_mp4_start_time(cls, mp4_filename):
+        """
+        """
+        return datetime.datetime.strptime(mp4_filename, cls.mp4_dateformat)
+
+
+    @classmethod
+    def get_video_file_duration(cls, cam_folder, start_time):
+        """ get video file duration from cam folder and start time
+        """
+        filename = f'{start_time.strftime(cls.dateformat)}.mp4'
+        filepath = f'{cam_folder}/{filename}'
+        return datetime.timedelta(seconds=mpe.VideoFileClip(filepath).duration)
+
+    @classmethod
+    def get_mp4_start_times_and_durations(cls, cam_folder) -> list:
+        """gets mp4 start times and druations from camera folder assuming dateformat='%Y-%m-%dT%H-%M-%SZ.mp4'
         
         Args:
             cam_folder (str): the camera folder in videomanager path with videos of dateformat mentioned above.
         
         Returns:
-            mp4_start_times (list): returns a list of the video start times in that folder as datetime.datetime objects
+            mp4_start_times (list): returns a list of 
+                                    tuples of (video_start_time, duration) 
+                                    which are type (datetime.datetime, datetime.timedelta)
+                                    represting the start time and duration of each mp4 video in the camera folder
         
         Raises:
             FileNotFoundError: if cam_folder doesn't exist on local path
             Exception: if cam_folder contains no valid mp4 files
         """
-        # verify mp4 files in directory
+        # verify mp4 files in directory and spaced apart by video_file_duration_sec
         all_files = os.listdir(cam_folder)
         mp4_files = [f for f in all_files if f.endswith('.mp4')]
         if len(mp4_files) == 0:
             raise Exception(f'there are no mp4 files in directory: {cam_folder}')
         
-        # get 10 min video start times from mp4 file names sorted in time order
+        # get 10 min video start times from mp4 file names
         cls.logger.debug(f'loading mp4 start times from folder {cam_folder}...')
         mp4_start_times = []
         for f in mp4_files:
-            dt_object = datetime.datetime.strptime(f, cls.mp4_dateformat)
+            dt_object = cls.get_mp4_start_time(f)
             mp4_start_times.append(dt_object)
+        
+        # sort in chronological order
         mp4_start_times = sorted(mp4_start_times)
-        cls.logger.debug('got these sorted mp4 start times: ')
-        [cls.logger.debug(f'    {f.strftime(cls.dateformat)}') for f in mp4_start_times]
-        return mp4_start_times
+        
+        # calc durations using time between start times 
+        mp4_start_times_and_durations = []
+        if len(mp4_start_times) == 1:
+            t = mp4_start_times[0]
+        else:
+            last_t = mp4_start_times[0]
+            for t in mp4_start_times[1:]:
+                duration = t - last_t
+                mp4_start_times_and_durations.append( (last_t, duration) )
+                last_t = t
+        # last file duration based on min expected file duration vs reported
+        vidfile_duration = cls.get_video_file_duration(cam_folder, t)
+        duration = min(vidfile_duration, cls.video_file_duration)
+        mp4_start_times_and_durations.append( (t, duration) )
+            
+        # debug print and return 
+        cls.logger.debug('got these sorted mp4 start times & durations: ')
+        [cls.logger.debug(f'    {t.strftime(cls.dateformat)} ({d})') for t, d in mp4_start_times_and_durations]
+
+        return mp4_start_times_and_durations
+
 
     @classmethod
-    def get_relevant_video_files(cls, mp4_start_times, start_time, end_time) -> list:
-        """assemble list of mp4 files that overlap the start/end time range
+    def get_relevant_times_and_durations(cls,
+            mp4_start_times_and_durations,
+            start_time, end_time) -> list:
+        """assemble list of mp4 file time/durations that overlap the start/end time range
+        Args:
+        Return:
+        Raises:
         """
 
-        # formatted date strings for printing
-        t1_str = start_time.strftime(cls.dateformat)
-        t2_str = end_time.strftime(cls.dateformat)
-
         # init vars
-        relevant_files = []
+        relevant_tds = []
         found_start = False
         found_end = False
-        ten_min = datetime.timedelta(minutes=10)
-        cls.logger.debug(f'looking for start time file for {t1_str}...')
-        for t in mp4_start_times:
-            filename = f'{t.strftime(cls.dateformat)}.mp4'
+        cls.logger.debug(f'looking for start time {start_time}...')
+        for t, d in mp4_start_times_and_durations:
+            file_end_time = t + d
+            t_range_info = f'{t} - {file_end_time} ({d})'
             if not found_start:
-                if start_time - t < ten_min:
+                if (start_time - t) < d:
                     found_start = True
-                    relevant_files.append(filename)
-                    cls.logger.debug(f'found start time in file: {filename}')
-                    cls.logger.debug(f'looking for end time file for {t2_str}...')
+                    cls.logger.debug(f'  found mp4 start time in: {t_range_info}')
+                    cls.logger.debug(f'looking for end time {end_time}...')
                 else:
-                    cls.logger.debug(f'skipping file {filename}')
-            elif not found_end:
-                relevant_files.append(filename)
-                if end_time - t < ten_min:
-                    cls.logger.debug(f'found end time in file: {filename}')
+                    cls.logger.debug(f'  start_time not found in: {t_range_info}')
+                    continue
+            
+            if found_start and (not found_end):
+                relevant_tds.append( (t, d) )
+                if (end_time - t) < d:
+                    cls.logger.debug(f'  found mp4 end time in: {t_range_info}')
                     found_end = True
                     break
+                else:
+                    cls.logger.debug(f'  end_time not found in: {t_range_info}')
             else:
                 break
 
-        return relevant_files
+        return relevant_tds
 
     @classmethod
-    def assemble_video_snippet(cls, cam_folder, relevant_files, start_time, end_time):
+    def assemble_video_snippet(cls, cam_folder, relevant_tds, start_time, end_time):
         """assembles video snippet from start to end time using the relevant files in cam folder
         
         Args:
             cam_folder (str): camera folder path
-            relevant_files (list): list of mp4 files (without camera folder path) ordered in time
+            relevant_tds (list): list of tuples of (time, duration) of type (datetime.datetime, datetime.timedelta)
+                representing start time of mp4 video file and duration based on next file start time
             start_time (datetime): snippet start time
             start_time (datetime): snippet end time
 
@@ -116,52 +162,59 @@ class SnippetManager:
         t2_str = end_time.strftime(cls.dateformat)
         duration = end_time - start_time
         
-        cls.logger.debug(f'now assembling from {t1_str} to {t2_str}')
-        cls.logger.debug(f'  duration: {duration}')
-        cls.logger.debug(f'  using files:')
-        [ cls.logger.debug(f'    {f}') for f in relevant_files]
         
-        if len(relevant_files) == 1:
+
+        cls.logger.debug(f'now assembling from {t1_str} to {t2_str} ({duration})')
+        cls.logger.debug(f'  using:')
+        [ cls.logger.debug(f'    {t} - {t+d} ({d})') for t, d in relevant_tds]
+        
+        if len(relevant_tds) == 1:
             #### just do a subclip of first & only video
-            first_file = relevant_files[0]
-            file_start_time = datetime.datetime.strptime(first_file, cls.mp4_dateformat)
-            
+            first_file_time, first_duration = relevant_tds[0]
+            first_file = f'{first_file_time.strftime(cls.dateformat)}.mp4'
             video = mpe.VideoFileClip(f'{cam_folder}/{first_file}')
-            clip_start_t_sec = (start_time - file_start_time).total_seconds()
-            clip_end_t_sec = (end_time - file_start_time).total_seconds()
+            clip_start_t_sec = (start_time - first_file_time).total_seconds()
+            clip_end_t_sec = (end_time - first_file_time).total_seconds()
 
             # return snippet
             return video.subclip(clip_start_t_sec, clip_end_t_sec)
         
         else:
             # get first and last video file names & start times
-            first_file, last_file = relevant_files[0], relevant_files[-1]
+            first_file_time, first_duration = relevant_tds[0]
+            last_file_time, last_duration = relevant_tds[-1]
+            first_file = f'{first_file_time.strftime(cls.dateformat)}.mp4'
+            last_file = f'{last_file_time.strftime(cls.dateformat)}.mp4'
 
-            # get video start time from file name
-            first_file_time = datetime.datetime.strptime(first_file, f'{cls.dateformat}.mp4')
-            last_file_time = datetime.datetime.strptime(last_file, f'{cls.dateformat}.mp4')
-            
             # make first video to clip from start_time until end
             first_video = mpe.VideoFileClip(f'{cam_folder}/{first_file}')
             clip_start_t_sec = (start_time - first_file_time).total_seconds()
-            ten_min_sec = 10 * 60
-            first_clip = first_video.subclip(clip_start_t_sec, ten_min_sec)
+            clip_end_t_sec = first_duration.total_seconds()
+            first_clip = first_video.subclip(clip_start_t_sec, clip_end_t_sec)
 
             # make last clip from beginning to end_time
             last_video = mpe.VideoFileClip(f'{cam_folder}/{last_file}')
+            clip_start_t_sec = 0
             clip_end_t_sec = (end_time - last_file_time).total_seconds()
-            last_clip = last_video.subclip(0, clip_end_t_sec)
+            last_clip = last_video.subclip(clip_start_t_sec, clip_end_t_sec)
 
             # concatenate together for final snippet using any files inbetween
             # middle_videos will be empty list if len(releveant_files) == 2
-            middle_videos = [mpe.VideoFileClip(f'{cam_folder}/{f}').subclip(0, ten_min_sec) for f in relevant_files[1:-1]]
+            middle_videos = []
+            for t,d in relevant_tds[1:-1]:
+                filename = f'{t.strftime(cls.dateformat)}.mp4'
+                filepath = f'{cam_folder}/{filename}'
+                clip_start_t_sec = 0
+                clip_end_t_sec = d.total_seconds()
+                middle_videos.append(mpe.VideoFileClip(filepath).subclip(clip_start_t_sec, clip_end_t_sec))
+
             clip_list = [first_clip, *middle_videos, last_clip]
             logger.debug('clip_list durations:')
             [logger.debug(f'  {v.duration} sec') for v in clip_list]
             return mpe.concatenate_videoclips(clip_list)
 
     @classmethod
-    def generate_snippet_for_cam(cls, cam_folder, start_time, end_time) -> str:
+    def generate_snippet_for_cam(cls, cam_folder, start_time, end_time, output_file=None) -> str:
         # take in datetime objects
         t1_str = start_time.strftime(cls.dateformat)
         t2_str = end_time.strftime(cls.dateformat)
@@ -174,22 +227,32 @@ class SnippetManager:
             raise Exception(f'start time {t1_str} is not less than end time {t2_str}. check your function inputs')
 
         # get start times list in datetime format from cam folder
-        mp4_start_times = cls.get_mp4_start_times(cam_folder)
+        mp4_start_times_and_durations = cls.get_mp4_start_times_and_durations(cam_folder)
 
-        # assemble list of mp4 files that overlap the start/end time range
-        relevant_files = cls.get_relevant_video_files(mp4_start_times, start_time, end_time)
-        cls.logger.info(f'relevant file list for {t1_str} to {t2_str}:')
-        [cls.logger.info(f'  {f}') for f in relevant_files]
+        # verify start_time is not before first start time 
+        mp4_list_first_time = mp4_start_times_and_durations[0][0]
+        if start_time < mp4_list_first_time:
+            raise Exception(f'start time {start_time} is less than mp4 list first time {mp4_list_first_time}')
+        last_start_t, last_dur = mp4_start_times_and_durations[-1]
+        mp4_list_last_time = last_start_t + last_dur
+        if end_time > mp4_list_last_time:
+            raise Exception(f'end time {end_time} is greater than mp4 list last time {mp4_list_last_time}')
+
+        # assemble list of mp4 file (start_time, duration) tuples that 
+        # overlap the start_time to end_time range
+        relevant_tds = cls.get_relevant_times_and_durations(mp4_start_times_and_durations, start_time, end_time)
+        cls.logger.info(f'relevant start times for {t1_str} to {t2_str}:')
+        [cls.logger.info(f'  {t} ({d})') for (t, d) in relevant_tds]
 
         # now assemble video snippet
-        final_snippet = cls.assemble_video_snippet(cam_folder, relevant_files, start_time, end_time)
+        final_snippet = cls.assemble_video_snippet(cam_folder, relevant_tds, start_time, end_time)
         cls.logger.info(f'final snippet duration: {final_snippet.duration} sec')
 
         # write final video snippet to file
-        output_file = 'final_snippet_out.mp4'
-        cls.logger.info(f'now writing final snippet out to: {output_file}')
-        final_snippet.write_videofile(output_file)
-        cls.logger.info('==== finished video snippet generation ====')
+        if output_file:
+            cls.logger.info(f'now writing final snippet out to: {output_file}')
+            final_snippet.write_videofile(output_file)
+            cls.logger.info('==== finished video snippet generation ====')
 
 if __name__=='__main__':
     
@@ -219,9 +282,9 @@ if __name__=='__main__':
     logger.addHandler(fh)
     logger.addHandler(ch)
     
-    # test msg
-    logger.debug('debug msg!')
-    logger.info('info msg!')
+    # # test logging
+    # logger.debug('debug msg!')
+    # logger.info('info msg!')
 
     # in future maybe actually use instance stuff for em listener. for now static methods
     snpm = SnippetManager()
@@ -243,9 +306,11 @@ if __name__=='__main__':
     test_join_with_timestamps = True
     if test_join_with_timestamps:
         start_time = datetime.datetime(2023, 1, 19, 17, 9, 30)
-        end_time = start_time + datetime.timedelta(seconds=610)
+        # start_time = datetime.datetime(2023, 1, 19, 16, 49, 20)
+        end_time = start_time + datetime.timedelta(minutes=10, seconds=10)
         snpm.generate_snippet_for_cam(
             cam_folder=testfolder,
             start_time=start_time,
-            end_time=end_time
+            end_time=end_time,
+            output_file=None # 'final_snippet.mp4'
         )
