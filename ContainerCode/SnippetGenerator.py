@@ -5,7 +5,7 @@ import os
 import datetime
 import logging
 
-class SnippetManager:
+class SnippetGenerator:
 
     logger = logging.getLogger(__name__)
     dateformat='%Y-%m-%dT%H-%M-%SZ'
@@ -265,7 +265,7 @@ if __name__=='__main__':
     logger = logging.getLogger(__name__)
     logger.setLevel(lowest_log_level)
     
-    # setup same format and file handler for both main and SnippetManager loggers
+    # setup same format and file handler for both main and SnippetGenerator loggers
     log_format=logging.Formatter('%(asctime)s [%(levelname)8s] %(message)s')
     
     # file logging config
@@ -281,13 +281,6 @@ if __name__=='__main__':
     # attach handlers
     logger.addHandler(fh)
     logger.addHandler(ch)
-    
-    # # test logging
-    # logger.debug('debug msg!')
-    # logger.info('info msg!')
-
-    # in future maybe actually use instance stuff for em listener. for now static methods
-    snpm = SnippetManager()
 
     # test video join
     testfolder = '/skaivideos/2023-01-19/B8A44F3C4792/'
@@ -301,14 +294,14 @@ if __name__=='__main__':
         file_list = mp4_files[0:2] 
         
         # test join    
-        snpm.join_mp4_file_list(file_list, "./test_snippet.mp4")
+        SnippetGenerator.join_mp4_file_list(file_list, "./test_snippet.mp4")
 
     test_join_with_timestamps = True
     if test_join_with_timestamps:
         start_time = datetime.datetime(2023, 1, 19, 17, 9, 30)
         # start_time = datetime.datetime(2023, 1, 19, 16, 49, 20)
         end_time = start_time + datetime.timedelta(minutes=10, seconds=10)
-        snpm.generate_snippet_for_cam(
+        SnippetGenerator.generate_snippet_for_cam(
             cam_folder=testfolder,
             start_time=start_time,
             end_time=end_time,
