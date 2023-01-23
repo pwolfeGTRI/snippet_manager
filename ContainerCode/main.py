@@ -58,6 +58,8 @@ class SnippetManager:
     @staticmethod
     def handle_em_msgs(stop_event, print_q, msg_q):
         ten_sec = timedelta(seconds=10)
+        logger = SnippetManager.logger
+        error_logger = SnippetManager.error_logger
         while not stop_event.is_set():
             if not msg_q.empty():
                 msg = msg_q.get_nowait()
@@ -83,10 +85,16 @@ class SnippetManager:
                 # create output folder exist ok
                 Path(output_folder).mkdir(parents=True, exist_ok=True)
                 
+                if len(msg.camera_time_ranges) == 0:
+                    error_logger.error('msg cam time ranges list empty!!!')
+                    logger.error('msg cam time ranges list empty!!!')
+                    continue
                 camera_mac_strings = []
                 for ctr in msg.camera_time_ranges:
                     if ctr.camera_id is None:
-                        error_logger.exception(f'got missing camera id!')
+                        printmsg = f'got missing camera id!'
+                        logger.exception(printmsg)
+                        error_logger.exception(printmsg)
                         continue
                     logger.info(f'converting cam id: {ctr.camera_id}...')
                     mac_hex_str = SkaiMsg.convert_camera_id_to_mac_addr_string(ctr.camera_id).upper()
@@ -112,6 +120,7 @@ class SnippetManager:
                         error_logger.exception(f'Not able to find folder {cam_folder}!!! not generating snippet for that cam')
 
                 logger.info(f'got msg event: {msg.event} for cameras {camera_mac_strings} from {event_start_time_dt} to {event_end_time_dt}')
+                logger.info(f'tasks: {len(tasks)}')
                 
                 for cam_folder, start_time, end_time, output_file in tasks:
                     logger.info(f'generating snippet for {cam_folder} {start_time} {end_time} {output_file}')
