@@ -27,6 +27,7 @@ services:
       - ./logs:/skailogs/
       - ${DEALERSHIP_CONFIG_FOLDER}:/dealership_config/
       - /var/skai/videos:/skaivideos/
+      - ./snippets:/snippets/
 
     environment:
       DISPLAY: ${DISPLAY_CHOICE}
