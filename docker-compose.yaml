@@ -31,8 +31,8 @@ services:
       - /var/skai/videos:/skaivideos/
       - ./snippets:/snippets/
 
-    environment:
-      DISPLAY: ${DISPLAY_CHOICE}
+    # environment:
+    #   DISPLAY: ${DISPLAY_CHOICE}
       
     # enabled for showing display locally
     # ipc: host
