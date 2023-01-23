@@ -63,7 +63,7 @@ class SnippetManager:
         while not stop_event.is_set():
             if not msg_q.empty():
                 msg = msg_q.get_nowait()
-                
+
 
                 #### tasks = SnippetManager.parse_em_msg(msg) ####
                 # each entry is: [cam_folder, start_time, end_time, output_file]
@@ -76,7 +76,7 @@ class SnippetManager:
                 date_str = event_start_time_dt.strftime('%Y-%m-%d')
                 event_start_time_str = event_start_time_dt.strftime('%H-%M-%S')
                 event_end_time_str = event_end_time_dt.strftime('%H-%M-%S')
-                output_folder = f"/snippets/{date_str}_E{msg.event}_{msg.primary_obj.global_id}_T{event_start_time_str}_T{event_end_time_str}_UTC"
+                output_folder = f"/snippets/{date_str}_E{msg.event}_ID{msg.primary_obj.global_id}_T{event_start_time_str}_T{event_end_time_str}_UTC"
 
                 # input folder path 
                 day_folder = event_start_time_dt.strftime(SnippetManager.camfolder_day_format)
