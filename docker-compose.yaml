@@ -8,8 +8,10 @@ services:
     container_name: ${BASENAME}_instance_${PARENTDIR}
 
     #### starting command that keeps container alive ####
-    command: tail -F /dev/null
     # command: ${START_CMD}
+    # command: tail -F /dev/null
+    command: python3 -u main.py
+    
 
     #### build Dockerfile and pass build args ####
     build:
