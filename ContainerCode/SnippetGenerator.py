@@ -59,7 +59,7 @@ class SnippetGenerator:
             mp4_start_times (list): returns a list of 
                                     tuples of (video_start_time, duration) 
                                     which are type (datetime.datetime, datetime.timedelta)
-                                    represting the start time and duration of each mp4 video in the camera folder
+                                    representing the start time and duration of each mp4 video in the camera folder
         
         Raises:
             FileNotFoundError: if cam_folder doesn't exist on local path

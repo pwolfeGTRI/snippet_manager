@@ -18,11 +18,6 @@ class SnippetManager:
     mp4_dateformat = f'{dateformat}.mp4'
     camfolder_day_format = '%Y-%m-%d'
 
-    # TODO move this to use parsed event message
-    current_day = datetime.now().strftime(camfolder_day_format)
-    cam_folder_path = f'/var/skai/videos/{current_day}'
-    # cam_folder_path = f'/skaivideos/2023-01-19'
-
     def __init__(self, print_q) -> None:
         self.stop_event = mp.Event()
         self.print_q = print_q
@@ -79,10 +74,8 @@ class SnippetManager:
                 output_folder = f"/snippets/{msg.primary_obj.global_id}_{event_start_time_str}_{event_end_time_str}"
 
                 # input folder path 
-                # event_start_time_dt
-                # current_day = datetime.now().strftime(camfolder_day_format)
-                # # cam_folder_path = f'/var/skai/videos/{current_day}'
-
+                day_folder = event_start_time_dt.strftime(SnippetManager.camfolder_day_format)
+                cam_folder_path = f'/skaivideos/{day_folder}'
                 
                 # create output folder exist ok
                 Path(output_folder).mkdir(parents=True, exist_ok=True)
@@ -101,7 +94,7 @@ class SnippetManager:
                     if duration < ten_sec:
                         end_time_dt = start_time_dt + ten_sec
                     
-                    cam_folder = f"{SnippetManager.cam_folder_path}/{mac_hex_str.replace(':', '')}"
+                    cam_folder = f"{cam_folder_path}/{mac_hex_str.replace(':', '')}"
                     if Path(cam_folder).is_dir():
                         output_file = f"{output_folder}/{mac_hex_str}_{start_time_str}_{end_time_str}.mp4"
                         tasks.append([cam_folder, start_time_dt, end_time_dt, output_file])
