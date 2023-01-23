@@ -3,3 +3,5 @@ manages generating snippets of video across segmented video files
 
 
 ## Assumptions
+
+video 
