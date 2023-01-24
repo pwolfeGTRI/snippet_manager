@@ -4,6 +4,7 @@ import moviepy.editor as mpe
 import os
 import datetime
 import logging
+from dataclasses import dataclass
 
 class SnippetGenerator:
 
@@ -13,6 +14,41 @@ class SnippetGenerator:
     mp4_dateformat = f'{dateformat}.mp4'
     video_file_duration_sec = 10*60 # duration of the video files in the cam_folder
     video_file_duration = datetime.timedelta(seconds=video_file_duration_sec)
+
+    @dataclass
+    class Task:
+        """Class for storing Snippet Generator task data"""
+        cam_folder: str # pathway on filesystem to camera mp4s
+        start_time: datetime.datetime # start time
+        end_time: datetime.datetime # end time
+        output_file: str # name of output file 
+        bboxes: list # list of TimeRangeBBoxes to draw/interpolate
+
+        def __str__(self):
+            return self.output_file
+
+    @classmethod
+    def process_task(cls, task):
+        """processes task data to make snippet, draw bboxes, etc
+        Args:
+            task: a SnippetGenerator.Task for storing task data
+        """
+        pass
+        final_snippet = cls.generate_snippet_for_cam(
+            cam_folder=task.cam_folder,
+            start_time=task.start_time,
+            end_time=task.end_time,
+            output_file=None)
+
+        # draw bboxes on it final clip before writing out if list is not empty
+        if len(task.bboxes) > 0:
+            # TODO: draw bboxes here
+            pass
+
+        # write final video snippet to file
+        cls.logger.info(f'now writing final snippet out to: {task.output_file}')
+        final_snippet.write_videofile(task.output_file)
+        cls.logger.info('==== finished video snippet generation ====')
 
     @staticmethod
     def join_mp4_file_list(file_list, output_file) -> None:
@@ -25,21 +61,10 @@ class SnippetGenerator:
         final_clip = mpe.concatenate_videoclips(video_clips)
         final_clip.write_videofile(output_file)
 
-    @staticmethod
-    def extract_clip(input_file, start_time, end_time, output_file):
-        video = mpe.VideoFileClip(input_file)
-        snippet = video.subclip(start_time, end_time)
-        snippet.write_videofile(output_file)
-
-        # # Example usage
-        # extract_clip("input.mp4", 10, 20, "output.mp4")
-
     @classmethod
     def get_mp4_start_time(cls, mp4_filename):
-        """
-        """
+        """gets start time as datetime object based on mp4 file name"""
         return datetime.datetime.strptime(mp4_filename, cls.mp4_dateformat)
-
 
     @classmethod
     def get_video_file_duration(cls, cam_folder, start_time):
@@ -164,8 +189,6 @@ class SnippetGenerator:
         t1_str = start_time.strftime(cls.dateformat)
         t2_str = end_time.strftime(cls.dateformat)
         duration = end_time - start_time
-        
-        
 
         cls.logger.debug(f'now assembling from {t1_str} to {t2_str} ({duration})')
         cls.logger.debug(f'  using:')
@@ -257,11 +280,14 @@ class SnippetGenerator:
         final_snippet = cls.assemble_video_snippet(cam_folder, relevant_tds, start_time, end_time)
         cls.logger.info(f'final snippet duration: {final_snippet.duration} sec')
 
-        # write final video snippet to file
+        # write final video snippet to file if desired
         if output_file:
             cls.logger.info(f'now writing final snippet out to: {output_file}')
             final_snippet.write_videofile(output_file)
             cls.logger.info('==== finished video snippet generation ====')
+        
+        # return final snippet
+        return final_snippet
 
 if __name__=='__main__':
     

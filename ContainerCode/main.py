@@ -11,7 +11,6 @@ from skaimsginterface.tcp import MultiportTcpListenerMP, TcpSenderMP
 from pathlib import Path
 
 
-
 class SnippetManager:
     logger = logging.getLogger(__name__)
     error_logger = logging.getLogger(f'{__name__}_errors')
@@ -64,11 +63,12 @@ class SnippetManager:
             if not msg_q.empty():
                 msg = msg_q.get_nowait()
 
-
-                #### tasks = SnippetManager.parse_em_msg(msg) ####
-                # each entry is: [cam_folder, start_time, end_time, output_file]
-                # event type, primary global id, event start time, event end time
-                tasks = []
+                # continue if no camera time ranges in msg
+                if len(msg.camera_time_ranges) == 0:
+                    printmsg = f'got msg type {msg.event} with cam time ranges list empty! not processing...'
+                    error_logger.error(printmsg)
+                    logger.error(printmsg)
+                    continue
 
                 # output folder naming (event primary_obj.global_id event_starttime event_endtime)
                 event_start_time_dt = datetime.fromtimestamp(msg.event_starttime / 1e9) + SnippetManager.convert2utc
@@ -78,17 +78,15 @@ class SnippetManager:
                 event_end_time_str = event_end_time_dt.strftime('%H-%M-%S')
                 output_folder = f"/snippets/{date_str}_E{msg.event}_ID{msg.primary_obj.global_id}_T{event_start_time_str}_T{event_end_time_str}_UTC"
 
-                # input folder path 
-                day_folder = event_start_time_dt.strftime(SnippetManager.camfolder_day_format)
-                cam_folder_path = f'/skaivideos/{day_folder}'
-                
                 # create output folder exist ok
                 Path(output_folder).mkdir(parents=True, exist_ok=True)
                 
-                if len(msg.camera_time_ranges) == 0:
-                    error_logger.error('msg cam time ranges list empty!!!')
-                    logger.error('msg cam time ranges list empty!!!')
-                    continue
+                # input folder path based on day from event_start_time_dt (UTC time)
+                day_folder = event_start_time_dt.strftime(SnippetManager.camfolder_day_format)
+                cam_folder_path = f'/skaivideos/{day_folder}'
+
+                # each task is SnippetGenerator.Task(cam_folder, start_time, end_time, output_file, TimeRangeBBoxes)
+                tasks = []
                 camera_mac_strings = []
                 for ctr in msg.camera_time_ranges:
                     if ctr.camera_id is None:
@@ -96,10 +94,8 @@ class SnippetManager:
                         logger.exception(printmsg)
                         error_logger.exception(printmsg)
                         continue
-                    logger.info(f'converting cam id: {ctr.camera_id}...')
                     mac_hex_str = SkaiMsg.convert_camera_id_to_mac_addr_string(ctr.camera_id).upper()
                     mac_hex_str_no_colon = mac_hex_str.replace(':', '')
-                    logger.info(f'converted cam id: {ctr.camera_id} to {mac_hex_str}')
                     camera_mac_strings.append(mac_hex_str)
                     
                     start_time_dt = datetime.fromtimestamp(msg.event_starttime / 1e9) + SnippetManager.convert2utc
@@ -115,16 +111,21 @@ class SnippetManager:
                     cam_folder = f"{cam_folder_path}/{mac_hex_str_no_colon}"
                     if Path(cam_folder).is_dir():
                         output_file = f"{output_folder}/{mac_hex_str_no_colon}_{date_str}_T{start_time_str}_T{end_time_str}_UTC.mp4"
-                        tasks.append([cam_folder, start_time_dt, end_time_dt, output_file])
+                        # tasks.append([cam_folder, start_time_dt, end_time_dt, output_file])
+                        tasks.append(SnippetGenerator.Task(cam_folder, start_time_dt, end_time_dt, output_file, ctr.tr_boxes))
                     else:
                         error_logger.exception(f'Not able to find folder {cam_folder}!!! not generating snippet for that cam')
 
                 logger.info(f'got msg event: {msg.event} for cameras {camera_mac_strings} from {event_start_time_dt} to {event_end_time_dt}')
                 logger.info(f'tasks: {len(tasks)}')
                 
-                for cam_folder, start_time, end_time, output_file in tasks:
-                    logger.info(f'generating snippet for {cam_folder} {start_time} {end_time} {output_file}')
-                    snpg.generate_snippet_for_cam(cam_folder, start_time, end_time, output_file)
+                # for cam_folder, start_time, end_time, output_file in tasks:
+                #     logger.info(f'generating snippet for {cam_folder} {start_time} {end_time} {output_file}')
+                #     snpg.generate_snippet_for_cam(cam_folder, start_time, end_time, output_file)
+                #     logger.info('done')
+                for t in tasks:
+                    logger.info(f'generating snippet for {t}')
+                    snpg.process_task(t)
                     logger.info('done')
 
     def multiport_callback(self, data, server_address):
@@ -134,10 +135,6 @@ class SnippetManager:
                 self.msg_q.put_nowait(msg)
         except Exception as e:
             logger.exception(e)
-
-    def parse_em_msg(msg):
-        return None, None, None, None
-
 
 if __name__=='__main__':  
     #### argparse config ####
