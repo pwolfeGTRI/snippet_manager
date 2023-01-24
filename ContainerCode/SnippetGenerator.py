@@ -10,11 +10,12 @@ from dataclasses import dataclass
 class SnippetGenerator:
 
     logger = logging.getLogger(__name__)
-    sg_error_logger = logging.getLogger(f'{__name__}_errors')
+    error_logger = logging.getLogger(f'{__name__}_errors')
     dateformat = '%Y-%m-%dT%H-%M-%SZ'
     mp4_dateformat = f'{dateformat}.mp4'
     video_file_duration_sec = 10 * 60  # duration of the video files in the cam_folder
     video_file_duration = datetime.timedelta(seconds=video_file_duration_sec)
+    convert2utc = datetime.timedelta(hours=5)
 
     @dataclass
     class Task:
@@ -96,7 +97,7 @@ class SnippetGenerator:
         mp4_files = [f for f in all_files if f.endswith('.mp4')]
         if len(mp4_files) == 0:
             exception_msg = f'there are no mp4 files in directory: {cam_folder}'
-            cls.sg_error_logger.exception(exception_msg)
+            cls.error_logger.exception(exception_msg)
             raise Exception(exception_msg)
 
         # get 10 min video start times from mp4 file names
@@ -120,13 +121,16 @@ class SnippetGenerator:
                 mp4_start_times_and_durations.append((last_t, duration))
                 last_t = t
         # last file duration based on min expected file duration vs reported
-        vidfile_duration = cls.get_video_file_duration(cam_folder, t)
-        duration = vidfile_duration  #min(vidfile_duration, cls.video_file_duration)
+        # vidfile_duration = cls.get_video_file_duration(cam_folder, t)
+        #vidfile_duration  #min(vidfile_duration, cls.video_file_duration)
+        current_dt_utc = datetime.datetime.now() + cls.convert2utc
+        duration = current_dt_utc - t 
         mp4_start_times_and_durations.append((t, duration))
 
         # debug print and return
         cls.logger.debug('got these sorted mp4 start times & durations: ')
         [cls.logger.debug(f'    {t.strftime(cls.dateformat)} ({d})') for t, d in mp4_start_times_and_durations]
+        
 
         return mp4_start_times_and_durations
 
@@ -191,6 +195,10 @@ class SnippetGenerator:
         cls.logger.debug(f'  using:')
         [cls.logger.debug(f'    {t} - {t+d} ({d})') for t, d in relevant_tds]
 
+        if len(relevant_tds) == 0:
+            printmsg = f'wait why are you sending me empty list relevant time date ranges?!?!?!'
+            cls.logger.error(printmsg)
+            cls.error_logger.error(printmsg)
         if len(relevant_tds) == 1:
             #### just do a subclip of first & only video
             first_file_time, first_duration = relevant_tds[0]
@@ -248,7 +256,7 @@ class SnippetGenerator:
         # verify end time is greater than start time
         if end_time < start_time:
             printmsg = f'start time {t1_str} is not less than end time {t2_str}. check your function inputs'
-            cls.sg_error_logger.exception(printmsg)
+            cls.error_logger.exception(printmsg)
             raise Exception(printmsg)
 
         # get start times list in datetime format from cam folder
@@ -258,13 +266,13 @@ class SnippetGenerator:
         mp4_list_first_time = mp4_start_times_and_durations[0][0]
         if start_time < mp4_list_first_time:
             printmsg = f'start time {start_time} is less than mp4 list first time {mp4_list_first_time}'
-            cls.sg_error_logger.exception(printmsg)
+            cls.error_logger.exception(printmsg)
             raise Exception(printmsg)
         last_start_t, last_dur = mp4_start_times_and_durations[-1]
         mp4_list_last_time = last_start_t + last_dur
         # if end_time > mp4_list_last_time:
         #     printmsg = f'end time {end_time} is greater than mp4 list last time {mp4_list_last_time}'
-        #     cls.sg_error_logger.exception(printmsg)
+        #     cls.error_logger.exception(printmsg)
         #     raise Exception(printmsg)
 
         # assemble list of mp4 file (start_time, duration) tuples that

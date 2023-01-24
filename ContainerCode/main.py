@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 from SnippetGenerator import SnippetGenerator as snpg
 import SnippetGenerator
-import datetime
-from datetime import timedelta
+# import datetime
+from datetime import timedelta, datetime
 import logging
 import argparse
 import multiprocessing as mp
@@ -53,6 +53,7 @@ class SnippetManager:
     @staticmethod
     def handle_em_msgs(stop_event, print_q, msg_q):
         ten_sec = timedelta(seconds=10)
+        five_sec = timedelta(seconds=10)
         logger = SnippetManager.logger
         error_logger = SnippetManager.error_logger
         while not stop_event.is_set():
@@ -62,8 +63,7 @@ class SnippetManager:
                 # continue if no camera time ranges in msg
                 if len(msg.camera_time_ranges) == 0:
                     printmsg = f'got msg type {msg.event} with cam time ranges list empty! not processing...'
-                    error_logger.error(printmsg)
-                    logger.error(printmsg)
+                    logger.debug(printmsg)
                     continue
 
                 # output folder naming (event primary_obj.global_id event_starttime event_endtime)
@@ -94,15 +94,25 @@ class SnippetManager:
                     mac_hex_str_no_colon = mac_hex_str.replace(':', '')
                     camera_mac_strings.append(mac_hex_str)
 
+                    
+                    # convert event times to utc datetime objects
                     start_time_dt = datetime.fromtimestamp(msg.event_starttime / 1e9) + SnippetManager.convert2utc
                     end_time_dt = datetime.fromtimestamp(msg.event_starttime / 1e9) + SnippetManager.convert2utc
+                    
+                    # check if duration is < 10 sec. if so move the start time back 5 sec
+                    duration = (end_time_dt - start_time_dt)
+                    if duration < ten_sec:
+                        start_time_dt = start_time_dt - five_sec
+
+                    # check if end time  3 sec of current time. if so delay 3 sec
+                    current_dt_utc = datetime.now() + SnippetManager.convert2utc
+                    if end_time_dt > (current_dt_utc - timedelta(seconds=3)):
+                        time.sleep(3)
+
+                    # form strings for output file
                     date_str = start_time_dt.strftime('%Y-%m-%d')
                     start_time_str = start_time_dt.strftime('%H-%M-%S')
                     end_time_str = end_time_dt.strftime('%H-%M-%S')
-
-                    duration = (end_time_dt - start_time_dt)
-                    if duration < ten_sec:
-                        end_time_dt = start_time_dt + ten_sec
 
                     cam_folder = f"{cam_folder_path}/{mac_hex_str_no_colon}"
                     if Path(cam_folder).is_dir():
