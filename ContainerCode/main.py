@@ -109,7 +109,7 @@ class SnippetManager:
                         output_file = f"{output_folder}/{mac_hex_str_no_colon}_{date_str}_T{start_time_str}_T{end_time_str}_UTC.mp4"
                         # tasks.append([cam_folder, start_time_dt, end_time_dt, output_file])
                         tasks.append(
-                            SnippetGenerator.Task(cam_folder, start_time_dt, end_time_dt, output_file, ctr.tr_boxes))
+                            snpg.Task(cam_folder, start_time_dt, end_time_dt, output_file, ctr.tr_boxes))
                     else:
                         error_logger.exception(
                             f'Not able to find folder {cam_folder}!!! not generating snippet for that cam')

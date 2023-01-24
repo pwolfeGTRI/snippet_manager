@@ -262,10 +262,10 @@ class SnippetGenerator:
             raise Exception(printmsg)
         last_start_t, last_dur = mp4_start_times_and_durations[-1]
         mp4_list_last_time = last_start_t + last_dur
-        if end_time > mp4_list_last_time:
-            printmsg = f'end time {end_time} is greater than mp4 list last time {mp4_list_last_time}'
-            cls.sg_error_logger.exception(printmsg)
-            raise Exception(printmsg)
+        # if end_time > mp4_list_last_time:
+        #     printmsg = f'end time {end_time} is greater than mp4 list last time {mp4_list_last_time}'
+        #     cls.sg_error_logger.exception(printmsg)
+        #     raise Exception(printmsg)
 
         # assemble list of mp4 file (start_time, duration) tuples that
         # overlap the start_time to end_time range
