@@ -62,6 +62,7 @@ class SnippetManager:
                     if len(msg.camera_time_ranges) == 0:
                         printmsg = f'got msg type {msg.event} with cam time ranges list empty! not processing...'
                         logger.debug(printmsg)
+                        error_logger.debug(printmsg)
                         continue
 
                     # output folder naming (event primary_obj.global_id event_starttime event_endtime)
@@ -70,7 +71,7 @@ class SnippetManager:
                     date_str = event_start_time_dt.strftime('%Y-%m-%d')
                     event_start_time_str = event_start_time_dt.strftime('%H-%M-%S')
                     event_end_time_str = event_end_time_dt.strftime('%H-%M-%S')
-                    output_folder = f"/snippets/{date_str}_E{msg.event}_ID{msg.primary_obj.global_id}_T{event_start_time_str}_T{event_end_time_str}_UTC"
+                    output_folder = f"/snippets/{date_str}/E{msg.event}/ID{msg.primary_obj.global_id}/T{event_start_time_str}_T{event_end_time_str}_UTC"
 
                     # create output folder exist ok
                     Path(output_folder).mkdir(parents=True, exist_ok=True)
@@ -102,7 +103,7 @@ class SnippetManager:
                             start_time_dt = start_time_dt - five_sec
 
                         # check if end time N sec of current time. if so delay N sec
-                        N = 13
+                        N = 3
                         current_dt_utc = snpg.get_current_utc_datetime()
                         if end_time_dt > (current_dt_utc - timedelta(seconds=N)):
                             time.sleep(N)

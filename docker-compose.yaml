@@ -31,7 +31,8 @@ services:
       - /var/skai/videos:/skaivideos/
       - ./snippets:/snippets/
 
-    # environment:
+    environment:
+      DISPLAY: "172.27.232.99:0"
     #   DISPLAY: ${DISPLAY_CHOICE}
       
     # enabled for showing display locally
