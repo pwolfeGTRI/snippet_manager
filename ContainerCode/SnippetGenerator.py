@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-
-import moviepy.editor as mpe
 import os
+# set audio driver before loading tracker cuz it uses pygame
+os.environ['SDL_AUDIODRIVER'] = 'dsp'
+from moviepy.editor import VideoFileClip, concatenate_videoclips
+from moviepy.video.tools.tracking import autoTrack
+
 import datetime
 import logging
 from dataclasses import dataclass
@@ -42,14 +45,61 @@ class SnippetGenerator:
                                                      output_file=None)
 
         # draw bboxes on it final clip before writing out if list is not empty
-        if len(task.bboxes) > 0:
-            # TODO: draw bboxes here
-            pass
+        cls.draw_bboxes(final_snippet, task)
 
         # write final video snippet to file
         cls.logger.info(f'now writing final snippet out to: {task.output_file}')
         final_snippet.write_videofile(task.output_file)
         cls.logger.info('==== finished video snippet generation ====')
+
+    @classmethod
+    def draw_bboxes(cls, snippet, task):
+        """
+        """
+        if len(task.bboxes) == 0:
+            cls.logger.warning('bboxes len is 0. returning original snippet')
+            return snippet
+
+        boxes_to_draw = []
+        for bbox in task.bboxes:
+            # report bbox timestamps outside start / end time range for the clip
+            ts = cls.convert_protobuf_ts_to_utc_datetime(bbox.timestamp)
+            if ts < task.start_time:
+                printmsg = f'bbox ts {ts} < start time {task.start_time} not drawing...'
+                cls.logger.warning(printmsg)
+                continue
+            if ts > task.end_time:
+                printmsg = f'bbox ts {ts} > end time {task.end_time}. not drawing...'
+                cls.logger.warning(printmsg)
+                continue
+
+            # otherwise save box as box to be drawn
+            boxes_to_draw.append(bbox)
+        
+        # if no boxes to draw, then report and return original snippet
+        if len(boxes_to_draw) == 0:
+            printmsg = f'no boxes in time range to draw. returning original snippet'
+            cls.logger.warning(printmsg)
+            return snippet
+        
+        # otherwise continue to drawing process
+        # TODO use autoTrack(clipl, pattern)
+        # iterate through frame from 
+        for frame in snippet.iter_frames():
+            # frame is hxwxn numpy array 
+            pass
+        
+
+        # return snippet with bboxes
+        return snippet
+
+    @classmethod
+    def convert_protobuf_ts_to_utc_datetime(cls, protobuf_ts):
+        return datetime.datetime.fromtimestamp(protobuf_ts / 1e9) + cls.convert2utc
+
+    @classmethod 
+    def get_current_utc_datetime(cls):
+        return datetime.datetime.now() + cls.convert2utc
 
     @staticmethod
     def join_mp4_file_list(file_list, output_file) -> None:
@@ -58,8 +108,8 @@ class SnippetGenerator:
             file_list (str): list of strings pointing to files on filepath to join
             output_file (str): name of output file 
         """
-        video_clips = [mpe.VideoFileClip(f) for f in file_list]
-        final_clip = mpe.concatenate_videoclips(video_clips)
+        video_clips = [VideoFileClip(f) for f in file_list]
+        final_clip = concatenate_videoclips(video_clips)
         final_clip.write_videofile(output_file)
 
     @classmethod
@@ -73,7 +123,7 @@ class SnippetGenerator:
         """
         filename = f'{start_time.strftime(cls.dateformat)}.mp4'
         filepath = f'{cam_folder}/{filename}'
-        return datetime.timedelta(seconds=mpe.VideoFileClip(filepath).duration)
+        return datetime.timedelta(seconds=VideoFileClip(filepath).duration)
 
     @classmethod
     def get_mp4_start_times_and_durations(cls, cam_folder) -> list:
@@ -184,7 +234,7 @@ class SnippetGenerator:
             start_time (datetime): snippet end time
 
         Return:
-            video_snippet (mpe.VideoFileClip): final assembled moviepy.editor.VideoFileClip snippet
+            video_snippet (VideoFileClip): final assembled moviepy.editor.VideoFileClip snippet
 
         """
         t1_str = start_time.strftime(cls.dateformat)
@@ -203,7 +253,7 @@ class SnippetGenerator:
             #### just do a subclip of first & only video
             first_file_time, first_duration = relevant_tds[0]
             first_file = f'{first_file_time.strftime(cls.dateformat)}.mp4'
-            video = mpe.VideoFileClip(f'{cam_folder}/{first_file}')
+            video = VideoFileClip(f'{cam_folder}/{first_file}')
             clip_start_t_sec = (start_time - first_file_time).total_seconds()
             clip_end_t_sec = (end_time - first_file_time).total_seconds()
 
@@ -218,13 +268,13 @@ class SnippetGenerator:
             last_file = f'{last_file_time.strftime(cls.dateformat)}.mp4'
 
             # make first video to clip from start_time until end
-            first_video = mpe.VideoFileClip(f'{cam_folder}/{first_file}')
+            first_video = VideoFileClip(f'{cam_folder}/{first_file}')
             clip_start_t_sec = (start_time - first_file_time).total_seconds()
             clip_end_t_sec = first_duration.total_seconds()
             first_clip = first_video.subclip(clip_start_t_sec, clip_end_t_sec)
 
             # make last clip from beginning to end_time
-            last_video = mpe.VideoFileClip(f'{cam_folder}/{last_file}')
+            last_video = VideoFileClip(f'{cam_folder}/{last_file}')
             clip_start_t_sec = 0
             clip_end_t_sec = (end_time - last_file_time).total_seconds()
             last_clip = last_video.subclip(clip_start_t_sec, clip_end_t_sec)
@@ -237,12 +287,12 @@ class SnippetGenerator:
                 filepath = f'{cam_folder}/{filename}'
                 clip_start_t_sec = 0
                 clip_end_t_sec = d.total_seconds()
-                middle_videos.append(mpe.VideoFileClip(filepath).subclip(clip_start_t_sec, clip_end_t_sec))
+                middle_videos.append(VideoFileClip(filepath).subclip(clip_start_t_sec, clip_end_t_sec))
 
             clip_list = [first_clip, *middle_videos, last_clip]
             cls.logger.debug('clip_list durations:')
             [cls.logger.debug(f'  {v.duration} sec') for v in clip_list]
-            return mpe.concatenate_videoclips(clip_list)
+            return concatenate_videoclips(clip_list)
 
     @classmethod
     def generate_snippet_for_cam(cls, cam_folder, start_time, end_time, output_file=None) -> str:
@@ -268,8 +318,8 @@ class SnippetGenerator:
             printmsg = f'start time {start_time} is less than mp4 list first time {mp4_list_first_time}'
             cls.error_logger.exception(printmsg)
             raise Exception(printmsg)
-        last_start_t, last_dur = mp4_start_times_and_durations[-1]
-        mp4_list_last_time = last_start_t + last_dur
+        # last_start_t, last_dur = mp4_start_times_and_durations[-1]
+        # mp4_list_last_time = last_start_t + last_dur
         # if end_time > mp4_list_last_time:
         #     printmsg = f'end time {end_time} is greater than mp4 list last time {mp4_list_last_time}'
         #     cls.error_logger.exception(printmsg)
