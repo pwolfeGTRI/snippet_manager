@@ -103,9 +103,11 @@ class SnippetManager:
                             start_time_dt = start_time_dt - five_sec
 
                         # check if end time N sec of current time. if so delay N sec
-                        N = 3
+                        N = 15
                         current_dt_utc = snpg.get_current_utc_datetime()
-                        if end_time_dt > (current_dt_utc - timedelta(seconds=N)):
+                        cur_minus_3 = current_dt_utc - timedelta(seconds=3)
+                        if end_time_dt > cur_minus_3:
+                            logger.debug(f'end time {end_time_dt} > cur_t - 3 ({cur_minus_3}). delaying {N} seconds')
                             time.sleep(N)
 
                         # form strings for output file
