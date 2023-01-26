@@ -118,7 +118,7 @@ class SnippetGenerator:
                 cls.logger.warning(printmsg)
                 continue
             if ts > task.end_time:
-                printmsg = f'bbox ts {ts} > end time {task.end_time}. not drawing...'
+                printmsg = f'bbox ts {ts} > end time {task.end_time}. (start time is {task.start_time}) not drawing...'
                 cls.logger.warning(printmsg)
                 continue
 

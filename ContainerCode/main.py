@@ -93,10 +93,12 @@ class SnippetManager:
                         mac_hex_str_no_colon = mac_hex_str.replace(':', '')
                         camera_mac_strings.append(mac_hex_str)
 
-                        # convert event times to utc datetime objects
-                        start_time_dt = snpg.convert_protobuf_ts_to_utc_datetime( msg.event_starttime)
-                        end_time_dt = snpg.convert_protobuf_ts_to_utc_datetime(msg.event_starttime)
+                        # convert ctr times to utc datetime objects
+                        start_time_dt = snpg.convert_protobuf_ts_to_utc_datetime(ctr.start_timestamp)
+                        end_time_dt = snpg.convert_protobuf_ts_to_utc_datetime(ctr.end_timestamp)
                         
+                        # TODO: compare bbox timestamps to see if they're in range?
+
                         # check if duration is < 10 sec. if so move the start time back 5 sec
                         duration = (end_time_dt - start_time_dt)
                         if duration < ten_sec:
@@ -104,10 +106,11 @@ class SnippetManager:
 
                         # check if end time N sec of current time. if so delay N sec
                         N = 15
+                        X = 10
                         current_dt_utc = snpg.get_current_utc_datetime()
-                        cur_minus_3 = current_dt_utc - timedelta(seconds=3)
-                        if end_time_dt > cur_minus_3:
-                            logger.debug(f'end time {end_time_dt} > cur_t - 3 ({cur_minus_3}). delaying {N} seconds')
+                        cur_minus_X = current_dt_utc - timedelta(seconds=X)
+                        if end_time_dt > cur_minus_X:
+                            logger.info(f'end time {end_time_dt} > cur_t - 3 ({cur_minus_X}). delaying {N} seconds')
                             time.sleep(N)
 
                         # form strings for output file
