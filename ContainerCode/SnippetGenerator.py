@@ -45,10 +45,9 @@ class SnippetGenerator:
             task: a SnippetGenerator.Task for storing task data
         """
         snippet = cls.generate_snippet_for_cam(cam_folder=task.cam_folder,
-                                                     start_time=task.start_time,
-                                                     end_time=task.end_time,
-                                                     output_file=task.output_file)
-
+                                               start_time=task.start_time,
+                                               end_time=task.end_time,
+                                               output_file=task.output_file)
 
         # draw bboxes on it final clip before writing out if list is not empty
         bbox_output_file = f"{task.output_file.strip('.mp4')}_boxes.mp4"
@@ -58,9 +57,9 @@ class SnippetGenerator:
 
     @classmethod
     def create_tracker(cls, tracker_type=None):
-        tracker_types = ['BOOSTING', 'MIL','KCF', 'TLD', 'MEDIANFLOW', 'GOTURN', 'MOSSE', 'CSRT']
+        tracker_types = ['BOOSTING', 'MIL', 'KCF', 'TLD', 'MEDIANFLOW', 'GOTURN', 'MOSSE', 'CSRT']
         if tracker_type is None:
-            tracker_type = 'KCF'
+            tracker_type = 'BOOSTING'  # 'KCF'
         elif tracker_type not in tracker_types:
             printmsg = f'{tracker_type} not in tracker types {tracker_types}'
             cls.logger.error(printmsg)
@@ -69,13 +68,13 @@ class SnippetGenerator:
         if tracker_type == 'BOOSTING':
             return cv2.legacy.TrackerBoosting_create()
         elif tracker_type == 'MIL':
-            return cv2.TrackerMIL_create() 
+            return cv2.TrackerMIL_create()
         elif tracker_type == 'KCF':
-            return cv2.TrackerKCF_create() 
+            return cv2.TrackerKCF_create()
         elif tracker_type == 'TLD':
-            return cv2.legacy.TrackerTLD_create() 
+            return cv2.legacy.TrackerTLD_create()
         elif tracker_type == 'MEDIANFLOW':
-            return cv2.legacy.TrackerMedianFlow_create() 
+            return cv2.legacy.TrackerMedianFlow_create()
         elif tracker_type == 'GOTURN':
             return cv2.TrackerGOTURN_create()
         elif tracker_type == 'MOSSE':
@@ -84,30 +83,16 @@ class SnippetGenerator:
             return cv2.TrackerCSRT_create()
 
     @classmethod
-    def draw_bboxes(cls, input_file, task, output_file) -> None:
+    def draw_bboxes(cls, input_file, task, output_file, interpolate=True, flip_bbox_xy=False) -> None:
         """
         """
+        test_draw = False
+
         # verify boxes present
         if len(task.bboxes) == 0:
             cls.logger.warning('bboxes len is 0. not drawing')
             return
 
-        # verify input file exists
-        cap = cv2.VideoCapture(input_file)
-        if not cap.isOpened():
-            cls.logger.error(f'draw_bboxes input file {input_file} didn\'t open')
-            return
-
-        # get width/height/fps by reading first frame
-        read_success, frame = cap.read()
-        if not read_success:
-            cls.logger.error(f'couldn\'t read frame for input file {input_file}')
-            return
-        frame_h, frame_w, frame_channels = frame.shape
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        
-
-        
         # verify bboxes  within start / end time
         boxes_to_draw = []
         for bbox in task.bboxes:
@@ -124,91 +109,125 @@ class SnippetGenerator:
 
             # otherwise save box as box to be drawn
             boxes_to_draw.append((ts, bbox.bboxes))
-        
+
         # if no boxes to draw, then report and return original snippet
         if len(boxes_to_draw) == 0:
             printmsg = f'no boxes in time range to draw. returning original snippet'
             cls.logger.warning(printmsg)
             return
-        
+
+        # verify input file exists
+        cap = cv2.VideoCapture(input_file)
+        if not cap.isOpened():
+            cls.logger.error(f'draw_bboxes input file {input_file} didn\'t open')
+            return
+
+        # get width/height/fps by reading first frame
+        read_success, frame = cap.read()
+        if not read_success:
+            cls.logger.error(f'couldn\'t read frame for input file {input_file}')
+            return
+        frame_h, frame_w, frame_channels = frame.shape
+        fps = cap.get(cv2.CAP_PROP_FPS)
+
         # verify can open output file for writing
-        # fourcc = cv2.VideoWriter_fourcc(*'MPEG') # too large
-        # fourcc = cv2.VideoWriter_fourcc(*'mp4v') # too large
-        # fourcc = cv2.VideoWriter_fourcc(*'H264')
-        fourcc = cv2.VideoWriter_fourcc(*'avc1')
-        out = cv2.VideoWriter(output_file, fourcc, fps, (frame_w,frame_h))
+        fourcc = cv2.VideoWriter_fourcc(*'avc1')  # avc1 is for h264
+        out = cv2.VideoWriter(output_file, fourcc, fps, (frame_w, frame_h))
         cls.logger.info(f'opened video for bbox drawing: fps: {fps}, resolution: {frame_w} x {frame_h}')
 
         #### drawing process ####
-        draw = True
-        interpolate = True
-        
+
         # rectangle settings
-        primary_object_color = (0, 255, 0) # bgr
-        associated_objects_colors = {} # bgr
+        primary_object_color = (0, 255, 0)  # bgr. draw in green
+        associated_objects_colors = {}  # bgr
         thickness = 2
 
         tracked_boxes = {}
         mp4_name_spl = Path(input_file).name.split('_')
-        date_str = '_'.join(mp4_name_spl[1:3]) # join date + start time to string with underscore inbetween
-        vid_start_time =  datetime.datetime.strptime(date_str, '%Y-%m-%d_T%H-%M-%S') # get datetime from string
-        
-        fail_count = 0
+        date_str = '_'.join(mp4_name_spl[1:3])  # join date + start time to string with underscore inbetween
+        vid_start_time = datetime.datetime.strptime(date_str, '%Y-%m-%d_T%H-%M-%S')  # get datetime from string
+
+        read_fail_count = 0
+        sequential_read_fail_limit = 4
         drew_new_box = False
         while cap.isOpened():
-            # read next frame
-            # cls.logger.debug('reading next frame...')
-            read_success, frame = cap.read()
+            # check previous read success, and read next frame
             if not read_success:
-                fail_count += 1
-                cls.logger.error(f'mp4 read fail. count={fail_count}')
-                if fail_count > 3:
+                read_fail_count += 1
+                cls.logger.error(f'mp4 read fail. count={read_fail_count}')
+
+                # if sequential fail limit exceeded then break
+                if read_fail_count >= sequential_read_fail_limit:
                     break
+                # otherwise read another frame and see if read_success at top of loop
                 else:
+                    read_success, frame = cap.read()
                     continue
             else:
-                fail_count = 0
-                # if not read_success:
-                #     cls.logger.error(f'couldn\'t read frame for input file {input_file}')
-            
+                # on read success reset fail counter
+                read_fail_count = 0
+
+            #### alternative check. not needed
             # if cap.get(cv2.CV_CAP_PROP_POS_FRAMES) == cap.get(cv2.CV_CAP_PROP_FRAME_COUNT):
-                # If the number of captured frames is equal to the total number of frames,
-                # we stop
-                # break
-            
-            if draw:
+            # If the number of captured frames is equal to the total number of frames,
+            # we stop
+            # break
+
+            if test_draw:
+                #### drawing test fixed bbox and frame flip ####
+                # flip frame as test and draw static bbox
+                frame = cv2.flip(frame, 0)
+                top = 200
+                bottom = 400
+                left = 500
+                right = 600
+                cv2.rectangle(frame, (left, top), (right, bottom), primary_object_color, thickness)
+            else:
                 # get time stamp based on milliseconds past start of video from opencv
                 ms_elapsed = cap.get(cv2.CAP_PROP_POS_MSEC)
                 frame_ts = vid_start_time + datetime.timedelta(milliseconds=ms_elapsed)
                 # cls.logger.debug(f'got ms_elapsed: {ms_elapsed} and frame ts: {frame_ts}')
 
-                # frame is hxwxn numpy array 
-                
+                # frame is hxwxn numpy array
+
                 # get first boxes list to draw
                 #   ts is datetime timestamp in utc
                 #   bboxes is list of skaiproto.interaction.GlobalBBox
-                ts, bboxes =  boxes_to_draw[0]
-                
+                ts, bboxes = boxes_to_draw[0]
+
                 #### check if first bboxes ts  <= frame_ts to draw protobuf boxes ####
                 if ts <= frame_ts:
-                    
+
                     # delete that first entry now
                     del boxes_to_draw[0]
-            
+
                     # draw bboxes for this timestamp
                     for box in bboxes:
                         # draw bbox on frame
-                        top, bottom = int(box.top * frame_h), int(box.bottom * frame_h)
-                        left, right = int(box.left * frame_w), int(box.right * frame_w)
+                        if flip_bbox_xy:
+                            left = int(box.top * frame_w)
+                            right = int(box.bottom * frame_w)
+                            top = int(box.left * frame_h)
+                            bottom = int(box.right * frame_h)
+                            # shift down by height
+                            bbox_h = bottom - top
+                            top += bbox_h
+                            bottom += bbox_h
+                            
+                        else:
+                            top, bottom = int(box.top * frame_h), int(box.bottom * frame_h)
+                            left, right = int(box.left * frame_w), int(box.right * frame_w)
+
                         cls.logger.debug(f'rectangles ms_elapsed: {ms_elapsed} and frame ts: {frame_ts}')
-                        cls.logger.debug(f'drawing rectangle(tlbr pixels): {top}, {left}, {bottom}, {right} on frame...')
+                        cls.logger.debug(
+                            f'drawing rectangle(tlbr pixels): {top}, {left}, {bottom}, {right} on frame...')
                         cv2.rectangle(frame, (left, top), (right, bottom), primary_object_color, thickness)
                         cls.logger.debug('rectangle draw success!')
                         drew_new_box = True
 
                         # init tracker on bbox if interpolating
                         if interpolate:
-                            # init tracker with bbox pixels    
+                            # init tracker with bbox pixels
                             x, y = left, top
                             w, h = right - left, bottom - top
                             tracked_boxes[box.global_id] = cls.create_tracker()
@@ -216,30 +235,19 @@ class SnippetGenerator:
                             cls.logger.debug(f'init-ing tracker with bbox(x,y,w,h): {init_bbox}')
                             tracked_boxes[box.global_id].init(frame, init_bbox)
 
-                        
-
-                
                 #### otherwise use template matching to interpolate bboxes ####
                 elif interpolate:
                     for global_id in tracked_boxes:
                         success, bbox = tracked_boxes[global_id].update(frame)
                         if success:
-                            (x,y,w,h)=[int(v) for v in bbox]
+                            (x, y, w, h) = [int(v) for v in bbox]
                             tracker_bbox = [x, y, w, h]
-                            cls.logger.debug(f'drawing interpolated tracker bbox(x,y,w,h): {tracker_bbox}')
-                            cv2.rectangle(frame,(x,y),(x+w,y+h), primary_object_color, thickness)
+                            # cls.logger.debug(f'drawing interpolated tracker bbox(x,y,w,h): {tracker_bbox}')
+                            cv2.rectangle(frame, (x, y), (x + w, y + h), primary_object_color, thickness)
                         else:
                             printmsg = f'error in tracker'
                             cls.logger.error(printmsg)
                             cls.error_logger.error(printmsg)
-            else:
-                # flip frame as test and draw static bbox
-                frame = cv2.flip(frame,0)
-                top = 200
-                bottom = 400
-                left = 500
-                right = 600
-                cv2.rectangle(frame, (left, top), (right, bottom), primary_object_color, thickness)
 
             # save frame to output (only write bbox frames if not interpolating)
             if not interpolate:
@@ -249,12 +257,14 @@ class SnippetGenerator:
             else:
                 out.write(frame)
 
+            # read next frame
+            read_success, frame = cap.read()
+
         # close out readers/writers
         cap.release()
         out.release()
 
         cls.logger.info('==== bbox writing done ====')
-
 
     @classmethod
     def draw_on_frame(frame, t):
@@ -264,7 +274,7 @@ class SnippetGenerator:
     def convert_protobuf_ts_to_utc_datetime(cls, protobuf_ts):
         return datetime.datetime.fromtimestamp(protobuf_ts / 1e9) + cls.convert2utc
 
-    @classmethod 
+    @classmethod
     def get_current_utc_datetime(cls):
         return datetime.datetime.now() + cls.convert2utc
 
@@ -342,13 +352,13 @@ class SnippetGenerator:
         vidfile_duration = cls.get_video_file_duration(cam_folder, t)
         current_dt_utc = datetime.datetime.now() + cls.convert2utc
         # duration = min(current_dt_utc - t, vidfile_duration)
-        duration = current_dt_utc - t - datetime.timedelta(seconds=3) #, vidfile_duration)
+        duration = current_dt_utc - t - datetime.timedelta(seconds=3)  #, vidfile_duration)
         mp4_start_times_and_durations.append((t, duration))
 
         # debug print and return
         cls.logger.debug('got these sorted mp4 start times & durations: ')
         [cls.logger.debug(f'    {t.strftime(cls.dateformat)} ({d})') for t, d in mp4_start_times_and_durations]
-        
+
         return mp4_start_times_and_durations
 
     @classmethod
@@ -486,7 +496,7 @@ class SnippetGenerator:
             printmsg = f'start time {start_time} is less than mp4 list first time {mp4_list_first_time}'
             cls.error_logger.exception(printmsg)
             raise Exception(printmsg)
-        
+
         last_start_t, last_dur = mp4_start_times_and_durations[-1]
         mp4_list_last_time = last_start_t + last_dur
         if end_time > mp4_list_last_time:
@@ -510,7 +520,7 @@ class SnippetGenerator:
             printmsg = f'video snippet could not be assembled!'
             cls.logger.error(printmsg)
             cls.error_logger.error(printmsg)
-        
+
         cls.logger.info(f'final snippet duration: {final_snippet.duration} sec')
 
         # write final video snippet to file if desired
@@ -583,12 +593,12 @@ if __name__ == '__main__':
     if test_bbox_drawing:
         mp4_files = [f'{testfolder}/{fname}' for fname in allfiles if fname.endswith('.mp4')]
         test_file = mp4_files[2]
-        
+
         logger.info(f'opening file {test_file}')
         cap = cv2.VideoCapture(test_file)
 
         frame_no = 0
-        while(cap.isOpened()):
+        while (cap.isOpened()):
             frame_exists, curr_frame = cap.read()
             if frame_exists:
                 ts_str = cap.get(cv2.CAP_PROP_POS_MSEC)
@@ -598,9 +608,3 @@ if __name__ == '__main__':
             frame_no += 1
 
         cap.release()
-
-
-        
-
-
-        
