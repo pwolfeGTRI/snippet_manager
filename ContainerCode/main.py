@@ -110,7 +110,7 @@ class SnippetManager:
                         current_dt_utc = snpg.get_current_utc_datetime()
                         cur_minus_X = current_dt_utc - timedelta(seconds=X)
                         if end_time_dt > cur_minus_X:
-                            logger.info(f'end time {end_time_dt} > cur_t - 3 ({cur_minus_X}). delaying {N} seconds')
+                            logger.info(f'got msg with end time {end_time_dt} > cur_t - 3 ({cur_minus_X}). delaying {N} seconds')
                             time.sleep(N)
 
                         # form strings for output file
