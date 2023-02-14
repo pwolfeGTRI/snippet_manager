@@ -105,8 +105,8 @@ class SnippetManager:
                             start_time_dt = start_time_dt - five_sec
 
                         # check if end time N sec of current time. if so delay N sec
-                        N = 15
-                        X = 10
+                        N = 310 # set this to be slightly higher than the mp4 input duration (5 mins - 300 seconds)
+                        X = 0
                         current_dt_utc = snpg.get_current_utc_datetime()
                         cur_minus_X = current_dt_utc - timedelta(seconds=X)
                         if end_time_dt > cur_minus_X:
