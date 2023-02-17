@@ -9,6 +9,17 @@ import multiprocessing as mp
 from skaimsginterface.skaimessages import *
 from skaimsginterface.tcp import MultiportTcpListenerMP, TcpSenderMP
 from pathlib import Path
+import yaml
+
+def read_yaml(file_path):
+    with open(file_path, "r") as f:
+        return yaml.safe_load(f)
+
+config = read_yaml(file_path="config.yaml")
+
+MP4_INPUT = config['TUNABLE_PARAMETERS']['MP4_INPUT']
+MP4_INPUT_DELAY = config['TUNABLE_PARAMETERS']['MP4_INPUT_DELAY']
+STREAM_INPUT_DELAY = config['TUNABLE_PARAMETERS']['STREAM_INPUT_DELAY']
 
 
 class SnippetManager:
@@ -53,6 +64,13 @@ class SnippetManager:
         five_sec = timedelta(seconds=10)
         logger = SnippetManager.logger
         error_logger = SnippetManager.error_logger
+
+        if MP4_INPUT:
+            print(f'MP4 input into ADAT being utilized, setting up delay for full video processing...')
+            print(f'Sleeping now for {MP4_INPUT_DELAY} seconds...')
+            time.sleep(MP4_INPUT_DELAY)
+            print(f'Done sleeping...')
+
         while not stop_event.is_set():
             try:
                 if not msg_q.empty():
@@ -104,14 +122,22 @@ class SnippetManager:
                         if duration < ten_sec:
                             start_time_dt = start_time_dt - five_sec
 
-                        # check if end time N sec of current time. if so delay N sec
-                        N = 15
-                        X = 10
-                        current_dt_utc = snpg.get_current_utc_datetime()
-                        cur_minus_X = current_dt_utc - timedelta(seconds=X)
-                        if end_time_dt > cur_minus_X:
-                            logger.info(f'got msg with end time {end_time_dt} > cur_t - 3 ({cur_minus_X}). delaying {N} seconds')
+                        if MP4_INPUT:
+                            pass
+                        else:
+                            # check if end time N sec of current time. if so delay N sec
+                            N = STREAM_INPUT_DELAY # set this to be slightly higher than the stream segment duration (5 mins - 300 seconds)
+                            X = 0
+                            current_dt_utc = snpg.get_current_utc_datetime()
+                            cur_minus_X = current_dt_utc - timedelta(seconds=X)
+
+                            print(f'Livestream input into ADAT being utilized, setting up delay for processing...')
+                            print(f'Sleeping now for {STREAM_INPUT_DELAY} seconds...')
+                            
+                            # if end_time_dt > cur_minus_X:
+                                # logger.info(f'got msg with end time {end_time_dt} > cur_t - 3 ({cur_minus_X}). delaying {N} seconds')
                             time.sleep(N)
+                            print(f'Done sleeping...')
 
                         # form strings for output file
                         date_str = start_time_dt.strftime('%Y-%m-%d')

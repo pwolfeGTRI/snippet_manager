@@ -22,7 +22,7 @@ class SnippetGenerator:
     error_logger = logging.getLogger(f'{__name__}_errors')
     dateformat = '%Y-%m-%dT%H-%M-%SZ'
     mp4_dateformat = f'{dateformat}.mp4'
-    video_file_duration_sec = 10 * 60  # duration of the video files in the cam_folder
+    video_file_duration_sec = 1 * 60  # duration of the video files in the cam_folder
     video_file_duration = datetime.timedelta(seconds=video_file_duration_sec)
     convert2utc = datetime.timedelta(hours=5)
 
@@ -83,7 +83,7 @@ class SnippetGenerator:
             return cv2.TrackerCSRT_create()
 
     @classmethod
-    def draw_bboxes(cls, input_file, task, output_file, interpolate=True, flip_bbox_xy=False) -> None:
+    def draw_bboxes(cls, input_file, task, output_file, interpolate=True, flip_bbox_xy=True) -> None:
         """
         """
         test_draw = False
@@ -140,7 +140,7 @@ class SnippetGenerator:
         # rectangle settings
         primary_object_color = (0, 255, 0)  # bgr. draw in green
         associated_objects_colors = {}  # bgr
-        thickness = 2
+        thickness = 1
 
         tracked_boxes = {}
         mp4_name_spl = Path(input_file).name.split('_')
@@ -209,10 +209,6 @@ class SnippetGenerator:
                             right = int(box.bottom * frame_w)
                             top = int(box.left * frame_h)
                             bottom = int(box.right * frame_h)
-                            # shift down by height
-                            bbox_h = bottom - top
-                            top += bbox_h
-                            bottom += bbox_h
                             
                         else:
                             top, bottom = int(box.top * frame_h), int(box.bottom * frame_h)
@@ -581,7 +577,8 @@ if __name__ == '__main__':
     if test_join_with_timestamps:
         start_time = datetime.datetime(2023, 1, 19, 17, 9, 30)
         # start_time = datetime.datetime(2023, 1, 19, 16, 49, 20)
-        end_time = start_time + datetime.timedelta(minutes=10, seconds=10)
+        # end_time = start_time + datetime.timedelta(minutes=10, seconds=10)
+        end_time = start_time + datetime.timedelta(minutes=0, seconds=59)
         SnippetGenerator.generate_snippet_for_cam(
             cam_folder=testfolder,
             start_time=start_time,

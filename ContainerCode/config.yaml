@@ -1,0 +1,7 @@
+TUNABLE_PARAMETERS:
+
+  #############################################################################################
+  # INPUT CONFIG
+  MP4_INPUT : False # set to True if an input mp4 is being used
+  MP4_INPUT_DELAY : 650 # (seconds) time of the input mp4 video, delays creation of snippets until video is written completely
+  STREAM_INPUT_DELAY : 70 # (seconds) time of each recorded livestream segment from videomanager, delays creation of snippets until video is written completely
