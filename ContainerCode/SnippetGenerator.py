@@ -22,7 +22,7 @@ class SnippetGenerator:
     error_logger = logging.getLogger(f'{__name__}_errors')
     dateformat = '%Y-%m-%dT%H-%M-%SZ'
     mp4_dateformat = f'{dateformat}.mp4'
-    video_file_duration_sec = 5 * 60  # duration of the video files in the cam_folder
+    video_file_duration_sec = 1 * 60  # duration of the video files in the cam_folder
     video_file_duration = datetime.timedelta(seconds=video_file_duration_sec)
     convert2utc = datetime.timedelta(hours=5)
 
